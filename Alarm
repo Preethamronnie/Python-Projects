@@ -1,0 +1,67 @@
+from tkinter import *
+import time
+import winsound
+from threading import Thread
+
+root = Tk()
+root.geometry("400x200")
+root.title("Timer")
+
+def start_timer():
+    Thread(target=run_timer, daemon=True).start()
+
+def run_timer():
+    # Convert input to total seconds
+    total_seconds = int(hour.get())*3600 + int(minute.get())*60 + int(second.get())
+
+    while total_seconds > 0:
+        mins, secs = divmod(total_seconds, 60)
+        hrs, mins = divmod(mins, 60)
+
+        # Print remaining seconds in console
+        print(f"Remaining seconds: {total_seconds}")
+
+        # Update GUI title
+        timer_display = f"{hrs:02}:{mins:02}:{secs:02}"
+        root.title(f"Timer: {timer_display}")
+
+        time.sleep(1)
+        total_seconds -= 1
+
+    # Timer finished
+    root.title("Time's up!")
+    print("Time's up!")
+
+    # Play sound
+    winsound.PlaySound("sound.wav", winsound.SND_ASYNC)
+
+
+# GUI Labels
+Label(root, text="TIMER", font=("Helvetica", 20, "bold"), fg="red").pack(pady=10)
+Label(root, text="Set Duration", font=("Helvetica", 15, "bold")).pack()
+
+frame = Frame(root)
+frame.pack()
+
+# Hour Dropdown
+hour = StringVar(root)
+hours = [f"{i:02}" for i in range(24)]
+hour.set(hours[0])
+OptionMenu(frame, hour, *hours).pack(side=LEFT)
+
+# Minute Dropdown
+minute = StringVar(root)
+minutes = [f"{i:02}" for i in range(60)]
+minute.set(minutes[0])
+OptionMenu(frame, minute, *minutes).pack(side=LEFT)
+
+# Second Dropdown
+second = StringVar(root)
+seconds = [f"{i:02}" for i in range(60)]
+second.set(seconds[0])
+OptionMenu(frame, second, *seconds).pack(side=LEFT)
+
+# Timer Start Button
+Button(root, text="Start Timer", font=("Helvetica", 15), command=start_timer).pack(pady=20)
+
+root.mainloop()
