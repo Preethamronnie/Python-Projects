@@ -7,10 +7,13 @@ root = Tk()
 root.geometry("400x200")
 root.title("Timer")
 
+alarm_running = False  # Flag to control alarm
+
 def start_timer():
     Thread(target=run_timer, daemon=True).start()
 
 def run_timer():
+    global alarm_running
     # Convert input to total seconds
     total_seconds = int(hour.get())*3600 + int(minute.get())*60 + int(second.get())
 
@@ -32,10 +35,41 @@ def run_timer():
     root.title("Time's up!")
     print("Time's up!")
 
-    # Play beep sound (frequency=2000Hz, duration=2000ms)
-    for i in range(3):  # Beep 3 times
+    # Start alarm
+    alarm_running = True
+    
+    # Show stop button
+    stop_button = Button(root, text="STOP ALARM (Press Enter)", 
+                        font=("Helvetica", 15, "bold"), 
+                        fg="white", bg="red",
+                        command=stop_alarm)
+    stop_button.pack(pady=10)
+    stop_button.focus_set()  # Set focus to button
+    
+    # Bind Enter key to stop alarm
+    root.bind('<Return>', lambda event: stop_alarm())
+    
+    # Start alarm sound loop
+    Thread(target=alarm_loop, daemon=True).start()
+
+def alarm_loop():
+    """Continuously play alarm sound"""
+    while alarm_running:
         winsound.Beep(2000, 500)  # High pitch beep for 0.5 seconds
-        time.sleep(0.2)
+        time.sleep(0.1)  # Short pause between beeps
+
+def stop_alarm():
+    """Stop the alarm"""
+    global alarm_running
+    alarm_running = False
+    winsound.PlaySound(None, winsound.SND_PURGE)  # Stop any playing sounds
+    root.title("Timer")
+    print("Alarm stopped!")
+    
+    # Remove the stop button if it exists
+    for widget in root.winfo_children():
+        if isinstance(widget, Button) and "STOP ALARM" in widget.cget("text"):
+            widget.destroy()
 
 
 # GUI Labels
