@@ -1,0 +1,100 @@
+import random
+from datetime import datetime
+
+print("=" * 50)
+print("          CHATBOT - JARVIS 1.0")
+print("=" * 50)
+print("Type 'bye' to exit")
+print()
+
+# Chatbot responses
+def get_response(message):
+    message = message.lower()
+    
+    # Greetings
+    if any(word in message for word in ["hello", "hi", "hey"]):
+        return random.choice([
+            "Hello! How can I help you?",
+            "Hi there! What can I do for you?",
+            "Hey! How are you doing?"
+        ])
+    
+    # How are you
+    elif any(phrase in message for phrase in ["how are you", "how r u"]):
+        return random.choice([
+            "I'm doing great, thanks for asking!",
+            "I'm fine! How about you?",
+            "All good! What about you?"
+        ])
+    
+    # Name
+    elif any(phrase in message for phrase in ["your name", "who are you"]):
+        return random.choice([
+            "I'm Jarvis, your chatbot assistant!",
+            "You can call me Jarvis!",
+            "I'm Jarvis 1.0!"
+        ])
+    
+    # Time
+    elif "time" in message:
+        current_time = datetime.now().strftime("%I:%M %p")
+        return f"The current time is {current_time}"
+    
+    # Date
+    elif "date" in message or "day" in message:
+        current_date = datetime.now().strftime("%A, %B %d, %Y")
+        return f"Today is {current_date}"
+    
+    # Jokes
+    elif "joke" in message:
+        jokes = [
+            "Why don't scientists trust atoms? Because they make up everything!",
+            "What do you call a bear with no teeth? A gummy bear!",
+            "Why did the scarecrow win an award? He was outstanding in his field!",
+            "What's the best thing about Switzerland? The flag is a big plus!"
+        ]
+        return random.choice(jokes)
+    
+    # Help
+    elif "help" in message:
+        return """I can help you with:
+- Say 'hello' to greet me
+- Ask 'how are you'
+- Ask 'what is your name'
+- Ask 'what time is it'
+- Ask 'tell me a joke'
+- Say 'bye' to exit"""
+    
+    # Thanks
+    elif any(word in message for word in ["thanks", "thank you"]):
+        return random.choice([
+            "You're welcome!",
+            "Happy to help!",
+            "Anytime!",
+            "My pleasure!"
+        ])
+    
+    # Default response
+    else:
+        return random.choice([
+            "I'm not sure I understand. Could you rephrase?",
+            "Interesting! Tell me more.",
+            "That's something to think about!",
+            "I'm still learning. Can you ask something else?"
+        ])
+
+
+# Main chat loop
+while True:
+    user_input = input("You: ")
+    
+    if user_input.lower() in ["bye", "goodbye", "exit", "quit"]:
+        print("Jarvis: Goodbye! Have a great day!")
+        break
+    
+    if user_input.strip() == "":
+        continue
+    
+    response = get_response(user_input)
+    print(f"Jarvis: {response}")
+    print()
