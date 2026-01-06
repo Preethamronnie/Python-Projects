@@ -1,0 +1,346 @@
+import tkinter as tk
+from tkinter import scrolledtext, messagebox, filedialog, Menu
+from datetime import datetime
+from openai import OpenAI
+import threading
+import json
+
+# ===================== THEME COLORS ===================== #
+BG_COLOR = "#0A0E27"
+CHAT_BG = "#1E293B"
+TEXT_COLOR = "#E2E8F0"
+USER_COLOR = "#34D399"
+JARVIS_COLOR = "#60A5FA"
+BUTTON_BG = "#1E3A8A"
+BUTTON_FG = "#60A5FA"
+STATUS_BG = "#0F172A"
+
+# ===================== AI INITIALIZATION ===================== #
+client = OpenAI()
+SYSTEM_PROMPT = (
+    "You are Jarvis, an intelligent, polite AI assistant inspired by Tony Stark's AI. "
+    "You help with general queries and technical questions. "
+    "Be concise, accurate, and professional."
+)
+conversation = [{"role": "system", "content": SYSTEM_PROMPT}]
+total_tokens = 0
+total_cost = 0.0
+
+# ===================== TOKEN & COST TRACKING ===================== #
+def calculate_cost(input_tokens, output_tokens, model):
+    """Calculate cost based on model pricing"""
+    if model == "gpt-4o":
+        input_cost = (input_tokens / 1_000_000) * 2.50
+        output_cost = (output_tokens / 1_000_000) * 10.00
+    elif model == "gpt-4o-mini":
+        input_cost = (input_tokens / 1_000_000) * 0.15
+        output_cost = (output_tokens / 1_000_000) * 0.60
+    else:  # gpt-3.5-turbo
+        input_cost = (input_tokens / 1_000_000) * 0.50
+        output_cost = (output_tokens / 1_000_000) * 1.50
+    return input_cost + output_cost
+
+def update_status():
+    """Update status bar with token count and cost"""
+    model = model_var.get()
+    temp = temp_var.get()
+    status_label.config(
+        text=f"Model: {model} | Temperature: {temp} | Tokens: {total_tokens} | Cost: ${total_cost:.4f}"
+    )
+
+# ===================== AI RESPONSE FUNCTION ===================== #
+def get_ai_response(user_input):
+    global total_tokens, total_cost
+    try:
+        conversation.append({"role": "user", "content": user_input})
+        response = client.chat.completions.create(
+            model=model_var.get(),
+            messages=conversation,
+            temperature=temp_var.get()
+        )
+        reply = response.choices[0].message.content.strip()
+        conversation.append({"role": "assistant", "content": reply})
+        
+        # Track tokens and cost
+        tokens_used = response.usage.total_tokens
+        total_tokens += tokens_used
+        cost = calculate_cost(
+            response.usage.prompt_tokens,
+            response.usage.completion_tokens,
+            model_var.get()
+        )
+        total_cost += cost
+        update_status()
+        
+        return reply
+    except Exception as e:
+        return f"⚠️ Error: {str(e)}"
+
+# ===================== MESSAGE HANDLING ===================== #
+def send_message(event=None):
+    user_input = user_entry.get().strip()
+    if not user_input:
+        return
+    
+    display_message("You", user_input, USER_COLOR)
+    user_entry.delete(0, tk.END)
+    
+    if user_input.lower() in ["bye", "exit", "quit", "goodbye"]:
+        display_message("Jarvis", "⚡ Goodbye! Have a great day, sir.", JARVIS_COLOR)
+        return
+    
+    threading.Thread(target=process_response, args=(user_input,), daemon=True).start()
+
+def process_response(user_input):
+    show_typing(True)
+    
+    if "time" in user_input.lower():
+        reply = f"⏰ The current time is {datetime.now().strftime('%I:%M %p')}"
+    elif "date" in user_input.lower() or "day" in user_input.lower():
+        reply = f"📅 Today is {datetime.now().strftime('%A, %B %d, %Y')}"
+    else:
+        reply = get_ai_response(user_input)
+    
+    show_typing(False)
+    display_message("Jarvis", reply, JARVIS_COLOR)
+
+# ===================== UI HELPERS ===================== #
+def display_message(sender, message, color):
+    chat_area.config(state=tk.NORMAL)
+    chat_area.insert(tk.END, f"{sender}: ", "sender")
+    chat_area.insert(tk.END, f"{message}\n\n", "message")
+    
+    # Apply color tags
+    start_idx = chat_area.index("end-2l linestart")
+    end_idx = chat_area.index("end-2l lineend")
+    chat_area.tag_add(color, start_idx, end_idx)
+    
+    chat_area.config(state=tk.DISABLED)
+    chat_area.yview(tk.END)
+
+def show_typing(show):
+    chat_area.config(state=tk.NORMAL)
+    if show:
+        chat_area.insert(tk.END, "⚡ Jarvis is thinking...\n", "typing")
+    else:
+        # Remove typing indicator
+        content = chat_area.get("1.0", tk.END)
+        if "⚡ Jarvis is thinking..." in content:
+            chat_area.delete("end-2l", "end-1l")
+    chat_area.config(state=tk.DISABLED)
+
+def clear_chat():
+    if messagebox.askyesno("Clear Chat", "Do you want to clear the conversation?"):
+        global conversation, total_tokens, total_cost
+        chat_area.config(state=tk.NORMAL)
+        chat_area.delete("1.0", tk.END)
+        chat_area.config(state=tk.DISABLED)
+        conversation = [{"role": "system", "content": SYSTEM_PROMPT}]
+        total_tokens = 0
+        total_cost = 0.0
+        update_status()
+        display_message("Jarvis", "⚡ Conversation reset. How can I help you, sir?", JARVIS_COLOR)
+
+# ===================== SAVE/LOAD FUNCTIONS ===================== #
+def save_conversation():
+    filename = filedialog.asksaveasfilename(
+        defaultextension=".txt",
+        filetypes=[("Text files", "*.txt"), ("JSON files", "*.json"), ("All files", "*.*")],
+        initialfile=f"jarvis_chat_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+    )
+    if filename:
+        try:
+            with open(filename, 'w', encoding='utf-8') as f:
+                f.write(f"JARVIS Conversation - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+                f.write("=" * 70 + "\n\n")
+                for msg in conversation[1:]:  # Skip system message
+                    role = "You" if msg["role"] == "user" else "Jarvis"
+                    f.write(f"{role}: {msg['content']}\n\n")
+                f.write("=" * 70 + "\n")
+                f.write(f"Total Tokens Used: {total_tokens}\n")
+                f.write(f"Total Cost: ${total_cost:.4f}\n")
+            messagebox.showinfo("Success", "Conversation saved successfully!")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to save: {str(e)}")
+
+def export_json():
+    filename = filedialog.asksaveasfilename(
+        defaultextension=".json",
+        filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
+        initialfile=f"jarvis_chat_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+    )
+    if filename:
+        try:
+            data = {
+                "timestamp": datetime.now().isoformat(),
+                "model": model_var.get(),
+                "temperature": temp_var.get(),
+                "total_tokens": total_tokens,
+                "total_cost": total_cost,
+                "conversation": conversation
+            }
+            with open(filename, 'w', encoding='utf-8') as f:
+                json.dump(data, f, indent=2)
+            messagebox.showinfo("Success", "Conversation exported as JSON!")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to export: {str(e)}")
+
+# ===================== COPY FUNCTION ===================== #
+def copy_last_message():
+    content = chat_area.get("1.0", tk.END)
+    lines = content.strip().split('\n\n')
+    if lines:
+        last_message = lines[-1]
+        root.clipboard_clear()
+        root.clipboard_append(last_message)
+        messagebox.showinfo("Copied", "Last message copied to clipboard!")
+
+# ===================== GUI SETUP ===================== #
+root = tk.Tk()
+root.title("⚡ JARVIS 2.0 - AI Assistant")
+root.geometry("800x700")
+root.configure(bg=BG_COLOR)
+
+# Menu Bar
+menubar = Menu(root)
+root.config(menu=menubar)
+
+file_menu = Menu(menubar, tearoff=0)
+menubar.add_cascade(label="File", menu=file_menu)
+file_menu.add_command(label="Save Conversation (Ctrl+S)", command=save_conversation)
+file_menu.add_command(label="Export as JSON", command=export_json)
+file_menu.add_separator()
+file_menu.add_command(label="Clear Chat (Ctrl+N)", command=clear_chat)
+file_menu.add_separator()
+file_menu.add_command(label="Exit", command=root.quit)
+
+edit_menu = Menu(menubar, tearoff=0)
+menubar.add_cascade(label="Edit", menu=edit_menu)
+edit_menu.add_command(label="Copy Last Message (Ctrl+C)", command=copy_last_message)
+
+# Settings Frame
+settings_frame = tk.Frame(root, bg=BG_COLOR)
+settings_frame.pack(fill=tk.X, padx=10, pady=10)
+
+# Model Selector
+tk.Label(settings_frame, text="Model:", bg=BG_COLOR, fg=TEXT_COLOR, font=("Consolas", 10)).pack(side=tk.LEFT, padx=5)
+model_var = tk.StringVar(value="gpt-4o-mini")
+model_menu = tk.OptionMenu(settings_frame, model_var, "gpt-4o", "gpt-4o-mini", "gpt-3.5-turbo")
+model_menu.config(bg=BUTTON_BG, fg=BUTTON_FG, font=("Consolas", 9), width=15)
+model_menu.pack(side=tk.LEFT, padx=5)
+
+# Temperature Slider
+tk.Label(settings_frame, text="Temperature:", bg=BG_COLOR, fg=TEXT_COLOR, font=("Consolas", 10)).pack(side=tk.LEFT, padx=5)
+temp_var = tk.DoubleVar(value=0.6)
+temp_slider = tk.Scale(
+    settings_frame, 
+    from_=0.0, 
+    to=2.0, 
+    resolution=0.1, 
+    orient=tk.HORIZONTAL,
+    variable=temp_var,
+    bg=BG_COLOR,
+    fg=TEXT_COLOR,
+    highlightthickness=0,
+    length=150
+)
+temp_slider.pack(side=tk.LEFT, padx=5)
+
+# Chat Area
+chat_area = scrolledtext.ScrolledText(
+    root,
+    wrap=tk.WORD,
+    font=("Consolas", 11),
+    state=tk.DISABLED,
+    bg=CHAT_BG,
+    fg=TEXT_COLOR,
+    insertbackground=TEXT_COLOR
+)
+chat_area.pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
+
+# Configure text tags for colors
+chat_area.tag_config("sender", font=("Consolas", 11, "bold"))
+chat_area.tag_config("message", font=("Consolas", 11))
+chat_area.tag_config(USER_COLOR, foreground=USER_COLOR)
+chat_area.tag_config(JARVIS_COLOR, foreground=JARVIS_COLOR)
+chat_area.tag_config("typing", foreground="#FCD34D", font=("Consolas", 10, "italic"))
+
+# Input Frame
+input_frame = tk.Frame(root, bg=BG_COLOR)
+input_frame.pack(fill=tk.X, padx=10, pady=5)
+
+user_entry = tk.Entry(
+    input_frame, 
+    font=("Consolas", 11),
+    bg=CHAT_BG,
+    fg=TEXT_COLOR,
+    insertbackground=TEXT_COLOR
+)
+user_entry.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, ipady=5)
+user_entry.bind("<Return>", send_message)
+
+# Button Frame
+button_frame = tk.Frame(root, bg=BG_COLOR)
+button_frame.pack(pady=5)
+
+send_btn = tk.Button(
+    button_frame,
+    text="⚡ Send",
+    width=12,
+    command=send_message,
+    bg=BUTTON_BG,
+    fg=BUTTON_FG,
+    font=("Consolas", 10, "bold"),
+    relief=tk.FLAT,
+    cursor="hand2"
+)
+send_btn.pack(side=tk.LEFT, padx=5)
+
+save_btn = tk.Button(
+    button_frame,
+    text="💾 Save",
+    width=12,
+    command=save_conversation,
+    bg=BUTTON_BG,
+    fg=BUTTON_FG,
+    font=("Consolas", 10, "bold"),
+    relief=tk.FLAT,
+    cursor="hand2"
+)
+save_btn.pack(side=tk.LEFT, padx=5)
+
+clear_btn = tk.Button(
+    button_frame,
+    text="🗑️ Clear",
+    width=12,
+    command=clear_chat,
+    bg=BUTTON_BG,
+    fg=BUTTON_FG,
+    font=("Consolas", 10, "bold"),
+    relief=tk.FLAT,
+    cursor="hand2"
+)
+clear_btn.pack(side=tk.LEFT, padx=5)
+
+# Status Bar
+status_label = tk.Label(
+    root,
+    text="Model: gpt-4o-mini | Temperature: 0.6 | Tokens: 0 | Cost: $0.0000",
+    bg=STATUS_BG,
+    fg="#64748B",
+    font=("Consolas", 9),
+    anchor=tk.W,
+    padx=10,
+    pady=5
+)
+status_label.pack(fill=tk.X, side=tk.BOTTOM)
+
+# Keyboard Shortcuts
+root.bind('<Control-s>', lambda e: save_conversation())
+root.bind('<Control-n>', lambda e: clear_chat())
+root.bind('<Control-c>', lambda e: copy_last_message())
+
+# Initial Message
+display_message("Jarvis", "⚡ Hello! JARVIS 2.0 is online and ready to assist you, sir.", JARVIS_COLOR)
+
+root.mainloop()
